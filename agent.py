@@ -2,18 +2,19 @@ from model import Actor, Critic
 from torch.optim import Adam
 from torch import from_numpy
 import numpy as np
+import ipdb
 import torch
 from torch.optim.lr_scheduler import LambdaLR
 
 
 class Agent:
-    def __init__(self, env_name, n_iter, n_states, action_bounds, n_actions, lr):
+    def __init__(self, env_name, n_iter, n_states, action_bounds, n_actions, lr, device):
         self.env_name = env_name
         self.n_iter = n_iter
         self.action_bounds = action_bounds
         self.n_actions = n_actions
         self.n_states = n_states
-        self.device = torch.device("cpu")
+        self.device = device#torch.device("cpu")
         self.lr = lr
 
         self.current_policy = Actor(n_states=self.n_states,
@@ -24,11 +25,16 @@ class Agent:
         self.critic_optimizer = Adam(self.critic.parameters(), lr=self.lr, eps=1e-5)
 
         self.critic_loss = torch.nn.MSELoss()
+        self.critic_grad_loss = torch.nn.MSELoss()
 
         self.scheduler = lambda step: max(1.0 - float(step / self.n_iter), 0)
 
         self.actor_scheduler = LambdaLR(self.actor_optimizer, lr_lambda=self.scheduler)
         self.critic_scheduler = LambdaLR(self.actor_optimizer, lr_lambda=self.scheduler)
+
+    def critic_losses(self,value, return_, val_grad, value_grad_targ):
+        # ipdb.set_trace()
+        return self.critic_loss(value, return_) + 100*self.critic_grad_loss(val_grad, value_grad_targ)
 
     def choose_dist(self, state):
         state = np.expand_dims(state, 0)
@@ -67,7 +73,7 @@ class Agent:
         self.actor_scheduler.step()
         self.critic_scheduler.step()
 
-    def save_weights(self, iteration, state_rms):
+    def save_weights(self, iteration, state_rms, name):
         torch.save({"current_policy_state_dict": self.current_policy.state_dict(),
                     "critic_state_dict": self.critic.state_dict(),
                     "actor_optimizer_state_dict": self.actor_optimizer.state_dict(),
@@ -77,7 +83,7 @@ class Agent:
                     "iteration": iteration,
                     "state_rms_mean": state_rms.mean,
                     "state_rms_var": state_rms.var,
-                    "state_rms_count": state_rms.count}, self.env_name + "_weights.pth")
+                    "state_rms_count": state_rms.count}, self.env_name + name + "_weights.pth")
 
     def load_weights(self):
         checkpoint = torch.load(self.env_name + "_weights.pth")
